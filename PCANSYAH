@@ -1,0 +1,1695 @@
+-- 🌌 FerYsah Multiverse - Enhanced Edition dengan Teleport to Cursor & Fly System
+-- GUI Modern Biru-Ungu dengan Multi-Jump, Teleport, Fly Features, dan Player Tracker
+---------------------------------------------------------------------
+-- 🔇 SILENT LOG MODE — level 1, 2, 3 (print, warn, error disenyapkan)
+---------------------------------------------------------------------
+
+-- Simpan fungsi asli
+local originalPrint = print
+local originalWarn  = warn
+local originalError = error
+
+-- Mode silent penuh
+local function EnableSilentLog()
+    print = function(...) end         -- Level 1: print mati
+    warn  = function(...) end         -- Level 2: warn mati
+    error = function(...) end         -- Level 3: error tidak muncul di output
+end
+
+-- Jika ingin matikan silent nanti (opsional), tinggal panggil ini:
+local function DisableSilentLog()
+    print = originalPrint
+    warn  = originalWarn
+    error = originalError
+end
+
+-- 🔥 SILENT MODE AKTIF OTOMATIS
+EnableSilentLog()
+---------------------------------------------------------------------  
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local UIS = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Mouse = game:GetService("Players").LocalPlayer:GetMouse()
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- === VARIABLES ===
+local enabled = true
+local maxJumps = 2
+local jumpsUsed = 0
+local humanoid, char
+local sprinting = false
+local sprintSpeed = 30
+local walkSpeed = 16
+local noclipConn
+local infJumpEnabled = false
+local keybindsEnabled = false
+local M_Pressed = false
+local forceWalkSpeed = nil
+local teleportEnabled = false
+
+-- === FLY SYSTEM VARIABLES ===
+local flying = false
+local flySpeed = 50
+local BV, BG -- BodyVelocity dan BodyGyro untuk fly
+local flyLoopConnection
+
+-- === TAB SYSTEM ===
+local currentTab = "Main"
+
+-- === ENHANCED GUI ===
+local gui = Instance.new("ScreenGui")
+gui.Name = "FerYsahMultiversePro"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+-- Main Container dengan efek glass morphism
+local mainContainer = Instance.new("Frame")
+mainContainer.Size = UDim2.fromOffset(400, 750)
+mainContainer.Position = UDim2.fromScale(0.02, 0.15)
+mainContainer.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+mainContainer.BackgroundTransparency = 0.1
+mainContainer.BorderSizePixel = 0
+mainContainer.Parent = gui
+
+-- Glass Effect
+local glassEffect = Instance.new("Frame")
+glassEffect.Size = UDim2.new(1, 0, 1, 0)
+glassEffect.BackgroundTransparency = 0.95
+glassEffect.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+glassEffect.BorderSizePixel = 0
+glassEffect.Parent = mainContainer
+
+-- Gradient Background
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(90, 50, 160)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(120, 80, 200)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 120, 220))
+})
+gradient.Rotation = 135
+gradient.Parent = mainContainer
+
+-- Styling
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 20)
+corner.Parent = mainContainer
+
+local stroke = Instance.new("UIStroke")
+stroke.Thickness = 2
+stroke.Color = Color3.fromRGB(180, 180, 255)
+stroke.Transparency = 0.3
+stroke.Parent = mainContainer
+
+-- Glow Effect
+local glow = Instance.new("ImageLabel")
+glow.Size = UDim2.new(1, 40, 1, 40)
+glow.Position = UDim2.new(-0.06, 0, -0.06, 0)
+glow.BackgroundTransparency = 1
+glow.Image = "rbxassetid://8992230671"
+glow.ImageColor3 = Color3.fromRGB(90, 50, 160)
+glow.ScaleType = Enum.ScaleType.Slice
+glow.SliceCenter = Rect.new(100, 100, 100, 100)
+glow.Parent = mainContainer
+
+-- Header dengan animasi
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 50)
+header.BackgroundTransparency = 1
+header.Parent = mainContainer
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 1, 0)
+title.Position = UDim2.fromOffset(15, 0)
+title.BackgroundTransparency = 1
+title.Text = "🌌 FER-YSAH MULTIVERSE PRO"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBlack
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.TextTransparency = 0.1
+title.Parent = header
+
+local subtitle = Instance.new("TextLabel")
+subtitle.Size = UDim2.new(1, -20, 0, 20)
+subtitle.Position = UDim2.fromOffset(15, 30)
+subtitle.BackgroundTransparency = 1
+subtitle.Text = "Enhanced Teleport & Fly Edition"
+subtitle.TextColor3 = Color3.fromRGB(200, 200, 255)
+subtitle.Font = Enum.Font.Gotham
+subtitle.TextSize = 12
+subtitle.TextXAlignment = Enum.TextXAlignment.Left
+subtitle.Parent = header
+
+-- === TAB SYSTEM UI ===
+local tabContainer = Instance.new("Frame")
+tabContainer.Size = UDim2.new(1, -20, 0, 40)
+tabContainer.Position = UDim2.fromOffset(10, 60)
+tabContainer.BackgroundTransparency = 1
+tabContainer.Parent = mainContainer
+
+local tabListLayout = Instance.new("UIListLayout")
+tabListLayout.Parent = tabContainer
+tabListLayout.FillDirection = Enum.FillDirection.Horizontal
+tabListLayout.Padding = UDim.new(0, 5)
+
+-- Main Tab Button
+local mainTabBtn = Instance.new("TextButton")
+mainTabBtn.Size = UDim2.new(0, 120, 1, 0)
+mainTabBtn.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+mainTabBtn.Text = "🏠 MAIN"
+mainTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+mainTabBtn.Font = Enum.Font.GothamBold
+mainTabBtn.TextSize = 12
+mainTabBtn.Parent = tabContainer
+Instance.new("UICorner", mainTabBtn).CornerRadius = UDim.new(0, 8)
+
+-- Player Tracker Tab Button
+local trackerTabBtn = Instance.new("TextButton")
+trackerTabBtn.Size = UDim2.new(0, 120, 1, 0)
+trackerTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+trackerTabBtn.Text = "👤 PLAYER TRACKER"
+trackerTabBtn.TextColor3 = Color3.fromRGB(200, 200, 255)
+trackerTabBtn.Font = Enum.Font.GothamBold
+trackerTabBtn.TextSize = 12
+trackerTabBtn.Parent = tabContainer
+Instance.new("UICorner", trackerTabBtn).CornerRadius = UDim.new(0, 8)
+
+-- Content Area dengan Scrolling (untuk tab Main)
+local scrollingFrame = Instance.new("ScrollingFrame")
+scrollingFrame.Size = UDim2.new(1, -20, 1, -110)
+scrollingFrame.Position = UDim2.fromOffset(10, 110)
+scrollingFrame.BackgroundTransparency = 1
+scrollingFrame.BorderSizePixel = 0
+scrollingFrame.ScrollBarThickness = 4
+scrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 150)
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 1100)
+scrollingFrame.Parent = mainContainer
+scrollingFrame.Visible = true
+
+-- Content Area untuk Player Tracker Tab
+local trackerFrame = Instance.new("Frame")
+trackerFrame.Size = UDim2.new(1, -20, 1, -110)
+trackerFrame.Position = UDim2.fromOffset(10, 110)
+trackerFrame.BackgroundTransparency = 1
+trackerFrame.Parent = mainContainer
+trackerFrame.Visible = false
+
+-- === DRAGGING FUNCTIONALITY ===
+local dragging, dragStart, startPos
+local function updateDrag(input)
+    local delta = input.Position - dragStart
+    mainContainer.Position = UDim2.fromOffset(startPos.X.Offset + delta.X, startPos.Y.Offset + delta.Y)
+end
+
+mainContainer.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainContainer.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+
+mainContainer.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        updateDrag(input)
+    end
+end)
+
+-- === ANIMATION FUNCTIONS ===
+local function animateButton(button)
+    local originalSize = button.Size
+    local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    
+    local shrink = TweenService:Create(button, tweenInfo, {Size = originalSize - UDim2.fromOffset(4, 4)})
+    local grow = TweenService:Create(button, tweenInfo, {Size = originalSize})
+    
+    shrink:Play()
+    shrink.Completed:Connect(function()
+        grow:Play()
+    end)
+end
+
+-- === ENHANCED TOGGLE TEMPLATE ===
+local yPos = 0
+local toggleElements = {}
+
+local function createEnhancedToggle(name, description, callback)
+    local toggleContainer = Instance.new("Frame")
+    toggleContainer.Size = UDim2.fromOffset(370, 50)
+    toggleContainer.Position = UDim2.fromOffset(0, yPos)
+    toggleContainer.BackgroundTransparency = 1
+    toggleContainer.Parent = scrollingFrame
+    
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.fromOffset(370, 40)
+    toggleBtn.Position = UDim2.fromOffset(0, 5)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    toggleBtn.BackgroundTransparency = 0.3
+    toggleBtn.Text = ""
+    toggleBtn.AutoButtonColor = false
+    toggleBtn.Parent = toggleContainer
+    
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 10)
+    
+    local toggleStroke = Instance.new("UIStroke")
+    toggleStroke.Thickness = 1
+    toggleStroke.Color = Color3.fromRGB(100, 100, 150)
+    toggleStroke.Transparency = 0.5
+    toggleStroke.Parent = toggleBtn
+    
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.fromOffset(240, 20)
+    nameLabel.Position = UDim2.fromOffset(15, 5)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = name
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextSize = 14
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = toggleBtn
+    
+    local descLabel = Instance.new("TextLabel")
+    descLabel.Size = UDim2.fromOffset(240, 15)
+    descLabel.Position = UDim2.fromOffset(15, 22)
+    descLabel.BackgroundTransparency = 1
+    descLabel.Text = description
+    descLabel.TextColor3 = Color3.fromRGB(180, 180, 220)
+    descLabel.Font = Enum.Font.Gotham
+    descLabel.TextSize = 11
+    descLabel.TextXAlignment = Enum.TextXAlignment.Left
+    descLabel.Parent = toggleBtn
+    
+    local statusIndicator = Instance.new("Frame")
+    statusIndicator.Size = UDim2.fromOffset(60, 25)
+    statusIndicator.Position = UDim2.fromOffset(295, 7)
+    statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+    statusIndicator.Parent = toggleBtn
+    Instance.new("UICorner", statusIndicator).CornerRadius = UDim.new(0, 12)
+    
+    local statusText = Instance.new("TextLabel")
+    statusText.Size = UDim2.new(1, 0, 1, 0)
+    statusText.BackgroundTransparency = 1
+    statusText.Text = "OFF"
+    statusText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    statusText.Font = Enum.Font.GothamBold
+    statusText.TextSize = 12
+    statusText.Parent = statusIndicator
+    
+    local state = false
+    
+    toggleBtn.MouseButton1Click:Connect(function()
+        animateButton(toggleBtn)
+        state = not state
+        
+        if state then
+            statusIndicator.BackgroundColor3 = Color3.fromRGB(50, 120, 50)
+            statusText.Text = "ON"
+        else
+            statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+            statusText.Text = "OFF"
+        end
+        
+        callback(state)
+    end)
+    
+    yPos += 55
+    
+    -- Store toggle element for reference
+    local toggleElement = {
+        button = toggleBtn,
+        statusIndicator = statusIndicator,
+        statusText = statusText,
+        state = false,
+        name = name
+    }
+    table.insert(toggleElements, toggleElement)
+    
+    return toggleElement
+end
+
+-- === TAB SYSTEM FUNCTIONS ===
+local function switchToTab(tabName)
+    currentTab = tabName
+    
+    if tabName == "Main" then
+        scrollingFrame.Visible = true
+        trackerFrame.Visible = false
+        mainTabBtn.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+        mainTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        trackerTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        trackerTabBtn.TextColor3 = Color3.fromRGB(200, 200, 255)
+    else
+        scrollingFrame.Visible = false
+        trackerFrame.Visible = true
+        mainTabBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+        mainTabBtn.TextColor3 = Color3.fromRGB(200, 200, 255)
+        trackerTabBtn.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+        trackerTabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end
+
+mainTabBtn.MouseButton1Click:Connect(function()
+    switchToTab("Main")
+end)
+
+trackerTabBtn.MouseButton1Click:Connect(function()
+    switchToTab("Tracker")
+end)
+
+-- === FLY SYSTEM FUNCTIONS ===
+local function FreezeBody()
+    if not player.Character then return end
+    local Hum = player.Character:FindFirstChildOfClass("Humanoid")
+    if not Hum then return end
+    
+    Hum.AutoRotate = false
+
+    local animator = Hum:FindFirstChildOfClass("Animator")
+    if animator then animator:Destroy() end
+
+    for _, track in ipairs(Hum:GetPlayingAnimationTracks()) do
+        track:Stop()
+    end
+
+    for _, v in ipairs(player.Character:GetDescendants()) do
+        if v:IsA("Motor6D") then
+            v.Transform = CFrame.new()
+        end
+    end
+end
+
+local function UnfreezeBody()
+    if not player.Character then return end
+    local Hum = player.Character:FindFirstChildOfClass("Humanoid")
+    if not Hum then return end
+    
+    Hum.AutoRotate = true
+
+    -- restore animator
+    if not Hum:FindFirstChildOfClass("Animator") then
+        local newAnimator = Instance.new("Animator")
+        newAnimator.Parent = Hum
+    end
+end
+
+local function StartFly()
+    if flying then return end
+    if not player.Character then 
+        StarterGui:SetCore("SendNotification", {
+            Title = "❌ ERROR", 
+            Text = "Character not found!",
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+        return 
+    end
+    
+    local HRP = player.Character:FindFirstChild("HumanoidRootPart")
+    if not HRP then 
+        StarterGui:SetCore("SendNotification", {
+            Title = "❌ ERROR", 
+            Text = "HumanoidRootPart not found!",
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+        return 
+    end
+    
+    flying = true
+
+    -- Freeze karakter
+    FreezeBody()
+
+    -- Buat BodyGyro untuk kontrol rotasi
+    BG = Instance.new("BodyGyro")
+    BG.P = 100000
+    BG.MaxTorque = Vector3.new(100000, 100000, 100000)
+    BG.CFrame = HRP.CFrame
+    BG.Parent = HRP
+
+    -- Buat BodyVelocity untuk kontrol movement
+    BV = Instance.new("BodyVelocity")
+    BV.Velocity = Vector3.new(0, 0, 0)
+    BV.MaxForce = Vector3.new(100000, 100000, 100000)
+    BV.Parent = HRP
+
+    -- Loop untuk update movement
+    flyLoopConnection = RunService.Heartbeat:Connect(function()
+        if not flying or not player.Character or not HRP or not HRP.Parent then
+            if flyLoopConnection then
+                flyLoopConnection:Disconnect()
+                flyLoopConnection = nil
+            end
+            return
+        end
+
+        local cam = workspace.CurrentCamera
+        local moveDirection = Vector3.new(0, 0, 0)
+        
+        -- Update rotasi berdasarkan kamera
+        BG.CFrame = CFrame.new(HRP.Position, HRP.Position + cam.CFrame.LookVector)
+
+        -- Input movement
+        if UIS:IsKeyDown(Enum.KeyCode.W) then
+            moveDirection = moveDirection + (cam.CFrame.LookVector * flySpeed)
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then
+            moveDirection = moveDirection - (cam.CFrame.LookVector * flySpeed)
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then
+            moveDirection = moveDirection - (cam.CFrame.RightVector * flySpeed)
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then
+            moveDirection = moveDirection + (cam.CFrame.RightVector * flySpeed)
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then
+            moveDirection = moveDirection + Vector3.new(0, flySpeed, 0)
+        end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+            moveDirection = moveDirection - Vector3.new(0, flySpeed, 0)
+        end
+
+        -- Apply velocity
+        BV.Velocity = moveDirection
+    end)
+
+    StarterGui:SetCore("SendNotification", {
+        Title = "🕊️ FLY ENABLED", 
+        Text = "Fly mode activated!\nWASD + Space/Ctrl to move",
+        Duration = 4,
+        Icon = "rbxassetid://3926305904"
+    })
+end
+
+local function StopFly()
+    if not flying then return end
+    
+    flying = false
+
+    -- Unfreeze karakter
+    UnfreezeBody()
+
+    -- Hapus BodyVelocity dan BodyGyro
+    if BV then 
+        BV:Destroy() 
+        BV = nil 
+    end
+    if BG then 
+        BG:Destroy() 
+        BG = nil 
+    end
+    
+    -- Hapus connection
+    if flyLoopConnection then
+        flyLoopConnection:Disconnect()
+        flyLoopConnection = nil
+    end
+
+    StarterGui:SetCore("SendNotification", {
+        Title = "🕊️ FLY DISABLED", 
+        Text = "Fly mode turned off",
+        Duration = 3,
+        Icon = "rbxassetid://3926305904"
+    })
+end
+
+-- === FLY SYSTEM SECTION ===
+local flySection = Instance.new("TextLabel")
+flySection.Size = UDim2.fromOffset(370, 25)
+flySection.Position = UDim2.fromOffset(0, yPos)
+flySection.BackgroundTransparency = 1
+flySection.Text = "🕊️ FLY SYSTEM"
+flySection.TextColor3 = Color3.fromRGB(100, 200, 255)
+flySection.Font = Enum.Font.GothamBold
+flySection.TextSize = 14
+flySection.TextXAlignment = Enum.TextXAlignment.Left
+flySection.Parent = scrollingFrame
+yPos += 30
+
+-- Fly Toggle
+local flyToggle = createEnhancedToggle("Fly Mode", "Toggle flying on/off", function(state)
+    if state then
+        StartFly()
+    else
+        StopFly()
+    end
+end)
+
+-- Fly Speed Control
+local flySpeedContainer = Instance.new("Frame")
+flySpeedContainer.Size = UDim2.fromOffset(370, 60)
+flySpeedContainer.Position = UDim2.fromOffset(0, yPos)
+flySpeedContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+flySpeedContainer.BackgroundTransparency = 0.4
+flySpeedContainer.Parent = scrollingFrame
+Instance.new("UICorner", flySpeedContainer).CornerRadius = UDim.new(0, 8)
+yPos += 70
+
+local flySpeedLabel = Instance.new("TextLabel")
+flySpeedLabel.Size = UDim2.fromOffset(120, 20)
+flySpeedLabel.Position = UDim2.fromOffset(15, 10)
+flySpeedLabel.BackgroundTransparency = 1
+flySpeedLabel.Text = "Fly Speed:"
+flySpeedLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+flySpeedLabel.Font = Enum.Font.GothamBold
+flySpeedLabel.TextSize = 12
+flySpeedLabel.TextXAlignment = Enum.TextXAlignment.Left
+flySpeedLabel.Parent = flySpeedContainer
+
+local flySpeedValue = Instance.new("TextLabel")
+flySpeedValue.Size = UDim2.fromOffset(60, 20)
+flySpeedValue.Position = UDim2.fromOffset(140, 10)
+flySpeedValue.BackgroundTransparency = 1
+flySpeedValue.Text = tostring(flySpeed)
+flySpeedValue.TextColor3 = Color3.fromRGB(100, 255, 100)
+flySpeedValue.Font = Enum.Font.GothamBold
+flySpeedValue.TextSize = 14
+flySpeedValue.TextXAlignment = Enum.TextXAlignment.Center
+flySpeedValue.Parent = flySpeedContainer
+
+local flyMinusBtn = Instance.new("TextButton")
+flyMinusBtn.Size = UDim2.fromOffset(40, 30)
+flyMinusBtn.Position = UDim2.fromOffset(210, 25)
+flyMinusBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+flyMinusBtn.Text = "-"
+flyMinusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+flyMinusBtn.Font = Enum.Font.GothamBold
+flyMinusBtn.TextSize = 16
+flyMinusBtn.Parent = flySpeedContainer
+Instance.new("UICorner", flyMinusBtn).CornerRadius = UDim.new(0, 6)
+
+local flyPlusBtn = Instance.new("TextButton")
+flyPlusBtn.Size = UDim2.fromOffset(40, 30)
+flyPlusBtn.Position = UDim2.fromOffset(260, 25)
+flyPlusBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+flyPlusBtn.Text = "+"
+flyPlusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+flyPlusBtn.Font = Enum.Font.GothamBold
+flyPlusBtn.TextSize = 16
+flyPlusBtn.Parent = flySpeedContainer
+Instance.new("UICorner", flyPlusBtn).CornerRadius = UDim.new(0, 6)
+
+local flyInfo = Instance.new("TextLabel")
+flyInfo.Size = UDim2.fromOffset(370, 40)
+flyInfo.Position = UDim2.fromOffset(0, yPos)
+flyInfo.BackgroundTransparency = 1
+flyInfo.Text = "Controls: WASD = Move, Space = Up, Ctrl = Down"
+flyInfo.TextColor3 = Color3.fromRGB(200, 200, 255)
+flyInfo.Font = Enum.Font.Gotham
+flyInfo.TextSize = 11
+flyInfo.TextXAlignment = Enum.TextXAlignment.Left
+flyInfo.TextYAlignment = Enum.TextYAlignment.Top
+flyInfo.Parent = scrollingFrame
+yPos += 50
+
+-- Fly Speed Control Functions
+flyMinusBtn.MouseButton1Click:Connect(function()
+    flySpeed = math.max(10, flySpeed - 10)
+    flySpeedValue.Text = tostring(flySpeed)
+end)
+
+flyPlusBtn.MouseButton1Click:Connect(function()
+    flySpeed = math.min(200, flySpeed + 10)
+    flySpeedValue.Text = tostring(flySpeed)
+end)
+
+-- === TELEPORT TO CURSOR SECTION ===
+local teleportSection = Instance.new("TextLabel")
+teleportSection.Size = UDim2.fromOffset(370, 25)
+teleportSection.Position = UDim2.fromOffset(0, yPos)
+teleportSection.BackgroundTransparency = 1
+teleportSection.Text = "🚀 TELEPORT SYSTEM"
+teleportSection.TextColor3 = Color3.fromRGB(100, 255, 100)
+teleportSection.Font = Enum.Font.GothamBold
+teleportSection.TextSize = 14
+teleportSection.TextXAlignment = Enum.TextXAlignment.Left
+teleportSection.Parent = scrollingFrame
+yPos += 30
+
+-- Teleport to Cursor Toggle
+local teleportToggle = createEnhancedToggle("Teleport to Cursor", "Left-click to teleport to cursor position (T key)", function(state)
+    teleportEnabled = state
+    if state then
+        StarterGui:SetCore("SendNotification", {
+            Title = "🚀 TELEPORT ENABLED", 
+            Text = "Left-click anywhere to teleport",
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+    else
+        StarterGui:SetCore("SendNotification", {
+            Title = "🚀 TELEPORT DISABLED", 
+            Text = "Teleport feature turned off",
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+    end
+end)
+
+-- Teleport Info
+local teleportInfo = Instance.new("TextLabel")
+teleportInfo.Size = UDim2.fromOffset(370, 40)
+teleportInfo.Position = UDim2.fromOffset(0, yPos)
+teleportInfo.BackgroundTransparency = 1
+teleportInfo.Text = "Klik kiri mouse untuk teleport ke posisi kursor\nTekan T untuk aktif/nonaktifkan teleport"
+teleportInfo.TextColor3 = Color3.fromRGB(200, 200, 255)
+teleportInfo.Font = Enum.Font.Gotham
+teleportInfo.TextSize = 11
+teleportInfo.TextXAlignment = Enum.TextXAlignment.Left
+teleportInfo.TextYAlignment = Enum.TextYAlignment.Top
+teleportInfo.Parent = scrollingFrame
+yPos += 50
+
+-- === KEYBINDS SECTION ===
+local keybindsSection = Instance.new("TextLabel")
+keybindsSection.Size = UDim2.fromOffset(370, 25)
+keybindsSection.Position = UDim2.fromOffset(0, yPos)
+keybindsSection.BackgroundTransparency = 1
+keybindsSection.Text = "⌨️ KEYBINDS SYSTEM"
+keybindsSection.TextColor3 = Color3.fromRGB(255, 150, 100)
+keybindsSection.Font = Enum.Font.GothamBold
+keybindsSection.TextSize = 14
+keybindsSection.TextXAlignment = Enum.TextXAlignment.Left
+keybindsSection.Parent = scrollingFrame
+yPos += 30
+
+-- Keybinds Toggle
+local keybindsToggle = createEnhancedToggle("Enable Keybinds", "Press M to activate keybinds mode", function(state)
+    keybindsEnabled = state
+    if state then
+        StarterGui:SetCore("SendNotification", {
+            Title = "⌨️ KEYBINDS ENABLED", 
+            Text = "Press M to activate keybinds mode\nN: Infinite Jump | J: Multi-Jump | B: NoClip",
+            Duration = 4,
+            Icon = "rbxassetid://3926305904"
+        })
+    end
+end)
+
+-- Keybinds Info
+local keybindsInfo = Instance.new("TextLabel")
+keybindsInfo.Size = UDim2.fromOffset(370, 100)
+keybindsInfo.Position = UDim2.fromOffset(0, yPos)
+keybindsInfo.BackgroundTransparency = 1
+keybindsInfo.Text = "M + Keybinds:\nN: Infinite Jump (Toggle)\nJ: Multi-Jump (Toggle)\nB: NoClip Toggle\n\nStandalone:\nT: Teleport Toggle\nL: Hide/Show GUI\nC: Destroy GUI\n+: Increase Speed\n-: Decrease Speed\nR: Sprint"
+keybindsInfo.TextColor3 = Color3.fromRGB(200, 200, 255)
+keybindsInfo.Font = Enum.Font.Gotham
+keybindsInfo.TextSize = 11
+keybindsInfo.TextXAlignment = Enum.TextXAlignment.Left
+keybindsInfo.TextYAlignment = Enum.TextYAlignment.Top
+keybindsInfo.Parent = scrollingFrame
+yPos += 110
+
+-- === MULTI-JUMP ENHANCED SECTION ===
+local multiJumpSection = Instance.new("TextLabel")
+multiJumpSection.Size = UDim2.fromOffset(350, 25)
+multiJumpSection.Position = UDim2.fromOffset(0, yPos)
+multiJumpSection.BackgroundTransparency = 1
+multiJumpSection.Text = "🎯 JUMP SYSTEM"
+multiJumpSection.TextColor3 = Color3.fromRGB(255, 215, 100)
+multiJumpSection.Font = Enum.Font.GothamBold
+multiJumpSection.TextSize = 14
+multiJumpSection.TextXAlignment = Enum.TextXAlignment.Left
+multiJumpSection.Parent = scrollingFrame
+yPos += 40
+
+-- Multi-Jump Toggle
+local multiJumpToggle = createEnhancedToggle("Multi-Jump", "Enable multiple jumps in air", function(state)
+    enabled = state
+    if state then
+        if infJumpEnabled then
+            disableInfiniteJump()
+        end
+    end
+    updateMultiJumpStatus()
+end)
+
+-- Infinite Jump Toggle
+local infiniteJumpToggle = createEnhancedToggle("Infinite Jump", "Unlimited jumps in air", function(state)
+    infJumpEnabled = state
+    if state then
+        if enabled then
+            disableMultiJump()
+        end
+    end
+    updateJumpSystemStatus()
+end)
+
+-- Multi-Jump Settings Container
+local jumpSettings = Instance.new("Frame")
+jumpSettings.Size = UDim2.fromOffset(370, 80)
+jumpSettings.Position = UDim2.fromOffset(0, yPos)
+jumpSettings.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+jumpSettings.BackgroundTransparency = 0.4
+jumpSettings.Parent = scrollingFrame
+Instance.new("UICorner", jumpSettings).CornerRadius = UDim.new(0, 8)
+yPos += 90
+
+local maxJumpsLabel = Instance.new("TextLabel")
+maxJumpsLabel.Size = UDim2.fromOffset(140, 20)
+maxJumpsLabel.Position = UDim2.fromOffset(15, 10)
+maxJumpsLabel.BackgroundTransparency = 1
+maxJumpsLabel.Text = "Max Jumps:"
+maxJumpsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+maxJumpsLabel.Font = Enum.Font.Gotham
+maxJumpsLabel.TextSize = 12
+maxJumpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+maxJumpsLabel.Parent = jumpSettings
+
+local maxJumpsBox = Instance.new("TextBox")
+maxJumpsBox.Size = UDim2.fromOffset(60, 30)
+maxJumpsBox.Position = UDim2.fromOffset(15, 35)
+maxJumpsBox.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+maxJumpsBox.Text = tostring(maxJumps)
+maxJumpsBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+maxJumpsBox.Font = Enum.Font.Gotham
+maxJumpsBox.TextSize = 14
+maxJumpsBox.ClearTextOnFocus = false
+maxJumpsBox.PlaceholderText = "0 = Unlimited"
+maxJumpsBox.Parent = jumpSettings
+Instance.new("UICorner", maxJumpsBox).CornerRadius = UDim.new(0, 6)
+
+local jumpStatusLabel = Instance.new("TextLabel")
+jumpStatusLabel.Size = UDim2.fromOffset(150, 40)
+jumpStatusLabel.Position = UDim2.fromOffset(190, 25)
+jumpStatusLabel.BackgroundTransparency = 1
+jumpStatusLabel.Text = "Status: READY"
+jumpStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+jumpStatusLabel.Font = Enum.Font.GothamBold
+jumpStatusLabel.TextSize = 12
+jumpStatusLabel.TextXAlignment = Enum.TextXAlignment.Center
+jumpStatusLabel.Parent = jumpSettings
+
+-- === FUNCTIONS TO CONTROL JUMP SYSTEMS ===
+local function disableMultiJump()
+    enabled = false
+    multiJumpToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+    multiJumpToggle.statusText.Text = "OFF"
+    multiJumpToggle.state = false
+    updateMultiJumpStatus()
+end
+
+local function disableInfiniteJump()
+    infJumpEnabled = false
+    infiniteJumpToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+    infiniteJumpToggle.statusText.Text = "OFF"
+    infiniteJumpToggle.state = false
+    updateJumpSystemStatus()
+end
+
+-- Multi-Jump Status Update
+local function updateMultiJumpStatus()
+    if enabled then
+        if maxJumps == 0 then
+            jumpStatusLabel.Text = "MULTI-JUMP\nUNLIMITED"
+            jumpStatusLabel.TextColor3 = Color3.fromRGB(255, 215, 100)
+        else
+            jumpStatusLabel.Text = "MULTI-JUMP\nMax: " .. maxJumps
+            jumpStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        end
+    elseif infJumpEnabled then
+        jumpStatusLabel.Text = "INFINITE JUMP\nACTIVE"
+        jumpStatusLabel.TextColor3 = Color3.fromRGB(255, 215, 100)
+    else
+        jumpStatusLabel.Text = "JUMP SYSTEM\nDISABLED"
+        jumpStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end
+
+local function updateJumpSystemStatus()
+    updateMultiJumpStatus()
+end
+
+maxJumpsBox.FocusLost:Connect(function(enterPressed)
+    local v = tonumber(maxJumpsBox.Text)
+    if v and v >= 0 and v <= 100 then
+        maxJumps = math.floor(v)
+        maxJumpsBox.Text = tostring(maxJumps)
+    else
+        maxJumpsBox.Text = tostring(maxJumps)
+    end
+    updateMultiJumpStatus()
+end)
+
+-- === OTHER FEATURES SECTIONS ===
+local otherSection = Instance.new("TextLabel")
+otherSection.Size = UDim2.fromOffset(370, 25)
+otherSection.Position = UDim2.fromOffset(0, yPos)
+otherSection.BackgroundTransparency = 1
+otherSection.Text = "⚡ MOVEMENT SYSTEM"
+otherSection.TextColor3 = Color3.fromRGB(100, 200, 255)
+otherSection.Font = Enum.Font.GothamBold
+otherSection.TextSize = 14
+otherSection.TextXAlignment = Enum.TextXAlignment.Left
+otherSection.Parent = scrollingFrame
+yPos += 30
+
+-- Copy Coordinates Button
+local copyBtn = Instance.new("TextButton")
+copyBtn.Size = UDim2.fromOffset(370, 40)
+copyBtn.Position = UDim2.fromOffset(0, yPos)
+copyBtn.BackgroundColor3 = Color3.fromRGB(60, 80, 120)
+copyBtn.BackgroundTransparency = 0.3
+copyBtn.Text = "📍 Copy Coordinates"
+copyBtn.TextColor3 = Color3.new(1, 1, 1)
+copyBtn.Font = Enum.Font.GothamBold
+copyBtn.TextSize = 14
+copyBtn.Parent = scrollingFrame
+Instance.new("UICorner", copyBtn).CornerRadius = UDim.new(0, 10)
+yPos += 50
+
+copyBtn.MouseButton1Click:Connect(function()
+    animateButton(copyBtn)
+    local pos = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if pos then
+        setclipboard(string.format("Vector3.new(%.2f, %.2f, %.2f)", pos.Position.X, pos.Position.Y, pos.Position.Z))
+        StarterGui:SetCore("SendNotification", {
+            Title = "✅ COPIED!", 
+            Text = "Coordinates copied to clipboard",
+            Duration = 2,
+            Icon = "rbxassetid://3926305904"
+        })
+    end
+end)
+
+-- WalkSpeed Input
+local wsLabel = Instance.new("TextLabel")
+wsLabel.Size = UDim2.fromOffset(370, 20)
+wsLabel.Position = UDim2.fromOffset(0, yPos)
+wsLabel.BackgroundTransparency = 1
+wsLabel.Text = "WalkSpeed:"
+wsLabel.TextColor3 = Color3.new(1, 1, 1)
+wsLabel.Font = Enum.Font.GothamBold
+wsLabel.TextSize = 12
+wsLabel.TextXAlignment = Enum.TextXAlignment.Left
+wsLabel.Parent = scrollingFrame
+yPos += 22
+
+local wsBox = Instance.new("TextBox")
+wsBox.Size = UDim2.fromOffset(370, 35)
+wsBox.Position = UDim2.fromOffset(0, yPos)
+wsBox.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
+wsBox.Text = tostring(walkSpeed)
+wsBox.TextColor3 = Color3.new(1, 1, 1)
+wsBox.Font = Enum.Font.Gotham
+wsBox.TextSize = 14
+wsBox.ClearTextOnFocus = false
+wsBox.PlaceholderText = "Enter walk speed..."
+wsBox.Parent = scrollingFrame
+Instance.new("UICorner", wsBox).CornerRadius = UDim.new(0, 8)
+yPos += 45
+
+-- Sprint Speed Input
+local sprintLabel = Instance.new("TextLabel")
+sprintLabel.Size = UDim2.fromOffset(370, 20)
+sprintLabel.Position = UDim2.fromOffset(0, yPos)
+sprintLabel.BackgroundTransparency = 1
+sprintLabel.Text = "Sprint Speed:"
+sprintLabel.TextColor3 = Color3.new(1, 1, 1)
+sprintLabel.Font = Enum.Font.GothamBold
+sprintLabel.TextSize = 12
+sprintLabel.TextXAlignment = Enum.TextXAlignment.Left
+sprintLabel.Parent = scrollingFrame
+yPos += 22
+
+local sprintBox = Instance.new("TextBox")
+sprintBox.Size = UDim2.fromOffset(370, 35)
+sprintBox.Position = UDim2.fromOffset(0, yPos)
+sprintBox.BackgroundColor3 = Color3.fromRGB(50, 60, 80)
+sprintBox.Text = tostring(sprintSpeed)
+sprintBox.TextColor3 = Color3.new(1, 1, 1)
+sprintBox.Font = Enum.Font.Gotham
+sprintBox.TextSize = 14
+sprintBox.ClearTextOnFocus = false
+sprintBox.PlaceholderText = "Enter sprint speed..."
+sprintBox.Parent = scrollingFrame
+Instance.new("UICorner", sprintBox).CornerRadius = UDim.new(0, 8)
+yPos += 50
+
+-- === UTILITIES SECTION ===
+local utilsSection = Instance.new("TextLabel")
+utilsSection.Size = UDim2.fromOffset(370, 25)
+utilsSection.Position = UDim2.fromOffset(0, yPos)
+utilsSection.BackgroundTransparency = 1
+utilsSection.Text = "🔧 UTILITIES"
+utilsSection.TextColor3 = Color3.fromRGB(150, 100, 255)
+utilsSection.Font = Enum.Font.GothamBold
+utilsSection.TextSize = 14
+utilsSection.TextXAlignment = Enum.TextXAlignment.Left
+utilsSection.Parent = scrollingFrame
+yPos += 30
+
+-- Create other toggles
+local noclipToggle = createEnhancedToggle("NoClip", "Walk through walls (B key)", function(state)
+    if state then
+        noclipConn = RunService.Stepped:Connect(function()
+            if player.Character then
+                for _, v in pairs(player.Character:GetDescendants()) do
+                    if v:IsA("BasePart") and v.CanCollide then
+                        v.CanCollide = false
+                    end
+                end
+            end
+        end)
+        StarterGui:SetCore("SendNotification", {
+            Title = "🚀 NO CLIP ENABLED", 
+            Text = "You can walk through walls",
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+    else
+        if noclipConn then
+            noclipConn:Disconnect()
+            noclipConn = nil
+        end
+        -- Restore collision properly
+        if player.Character then
+            for _, v in pairs(player.Character:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = true
+                end
+            end
+        end
+        StarterGui:SetCore("SendNotification", {
+            Title = "🚀 NO CLIP DISABLED", 
+            Text = "Collision restored",
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+    end
+end)
+
+createEnhancedToggle("No Damage", "Become invincible", function(state)
+    if state and player.Character then
+        local hum = player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.MaxHealth, hum.Health = math.huge, math.huge
+            hum:GetPropertyChangedSignal("Health"):Connect(function()
+                if hum.Health < hum.MaxHealth then hum.Health = hum.MaxHealth end
+            end)
+        end
+    end
+end)
+
+createEnhancedToggle("Always Day", "Keep eternal daylight", function(state)
+    if state then
+        Lighting.ClockTime = 14
+        RunService.Heartbeat:Connect(function()
+            if state then Lighting.ClockTime = 14 end
+        end)
+    end
+end)
+
+createEnhancedToggle("No Fog", "Remove fog for clear vision", function(state)
+    if state then
+        Lighting.FogEnd = 1e9
+    else
+        Lighting.FogEnd = 1000
+    end
+end)
+
+-- Update scrolling frame canvas size
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, yPos + 20)
+
+-- === PLAYER TRACKER TAB CONTENT ===
+local function GetRoot(char)
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("Torso")
+        or char:FindFirstChild("UpperTorso")
+end
+
+-- Player Tracker Title
+local trackerTitle = Instance.new("TextLabel")
+trackerTitle.Size = UDim2.new(1, 0, 0, 30)
+trackerTitle.Position = UDim2.fromOffset(0, 10)
+trackerTitle.BackgroundTransparency = 1
+trackerTitle.Text = "👤 PLAYER TRACKER"
+trackerTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+trackerTitle.Font = Enum.Font.GothamBold
+trackerTitle.TextSize = 18
+trackerTitle.TextXAlignment = Enum.TextXAlignment.Center
+trackerTitle.Parent = trackerFrame
+
+-- Player List Section
+local playerListSection = Instance.new("TextLabel")
+playerListSection.Size = UDim2.new(1, 0, 0, 25)
+playerListSection.Position = UDim2.fromOffset(0, 50)
+playerListSection.BackgroundTransparency = 1
+playerListSection.Text = "PLAYER LIST"
+playerListSection.TextColor3 = Color3.fromRGB(180, 180, 255)
+playerListSection.TextSize = 14
+playerListSection.Font = Enum.Font.GothamBold
+playerListSection.TextXAlignment = Enum.TextXAlignment.Left
+playerListSection.Parent = trackerFrame
+
+local playerList = Instance.new("ScrollingFrame")
+playerList.Size = UDim2.new(1, 0, 0, 150)
+playerList.Position = UDim2.fromOffset(0, 75)
+playerList.CanvasSize = UDim2.new(0, 0, 0, 0)
+playerList.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+playerList.BorderSizePixel = 0
+playerList.ScrollBarThickness = 6
+playerList.ScrollBarImageColor3 = Color3.fromRGB(80, 120, 255)
+playerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+playerList.Parent = trackerFrame
+Instance.new("UICorner", playerList).CornerRadius = UDim.new(0, 8)
+
+local playerListLayout = Instance.new("UIListLayout")
+playerListLayout.Parent = playerList
+playerListLayout.Padding = UDim.new(0, 5)
+
+local playerListPadding = Instance.new("UIPadding")
+playerListPadding.Parent = playerList
+playerListPadding.PaddingLeft = UDim.new(0, 5)
+playerListPadding.PaddingTop = UDim.new(0, 5)
+playerListPadding.PaddingRight = UDim.new(0, 5)
+
+-- Coordinates Section
+local coordSection = Instance.new("TextLabel")
+coordSection.Size = UDim2.new(1, 0, 0, 25)
+coordSection.Position = UDim2.fromOffset(0, 240)
+coordSection.BackgroundTransparency = 1
+coordSection.Text = "COORDINATES"
+coordSection.TextColor3 = Color3.fromRGB(180, 180, 255)
+coordSection.TextSize = 14
+coordSection.Font = Enum.Font.GothamBold
+coordSection.TextXAlignment = Enum.TextXAlignment.Left
+coordSection.Parent = trackerFrame
+
+local coordCard = Instance.new("Frame")
+coordCard.Size = UDim2.new(1, 0, 0, 80)
+coordCard.Position = UDim2.fromOffset(0, 265)
+coordCard.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+coordCard.BorderSizePixel = 0
+coordCard.Parent = trackerFrame
+Instance.new("UICorner", coordCard).CornerRadius = UDim.new(0, 8)
+
+local coordLabel = Instance.new("TextLabel")
+coordLabel.Size = UDim2.new(1, -20, 1, -20)
+coordLabel.Position = UDim2.new(0, 10, 0, 10)
+coordLabel.BackgroundTransparency = 1
+coordLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+coordLabel.TextXAlignment = Enum.TextXAlignment.Left
+coordLabel.TextWrapped = true
+coordLabel.TextSize = 14
+coordLabel.Font = Enum.Font.Gotham
+coordLabel.Text = "Pilih player..."
+coordLabel.Parent = coordCard
+
+-- Buttons Container
+local trackerButtonContainer = Instance.new("Frame")
+trackerButtonContainer.Size = UDim2.new(1, 0, 0, 90)
+trackerButtonContainer.Position = UDim2.fromOffset(0, 360)
+trackerButtonContainer.BackgroundTransparency = 1
+trackerButtonContainer.Parent = trackerFrame
+
+-- Refresh Button
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(1, 0, 0, 40)
+refreshBtn.Position = UDim2.fromOffset(0, 0)
+refreshBtn.BackgroundColor3 = Color3.fromRGB(60, 80, 180)
+refreshBtn.Text = "🔄 Refresh Player List"
+refreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshBtn.TextSize = 14
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.Parent = trackerButtonContainer
+Instance.new("UICorner", refreshBtn).CornerRadius = UDim.new(0, 8)
+
+-- Teleport Button
+local teleportToPlayerBtn = Instance.new("TextButton")
+teleportToPlayerBtn.Size = UDim2.new(1, 0, 0, 40)
+teleportToPlayerBtn.Position = UDim2.fromOffset(0, 50)
+teleportToPlayerBtn.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+teleportToPlayerBtn.Text = "🚀 Teleport ke Player"
+teleportToPlayerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+teleportToPlayerBtn.TextSize = 14
+teleportToPlayerBtn.Font = Enum.Font.GothamBold
+teleportToPlayerBtn.Parent = trackerButtonContainer
+Instance.new("UICorner", teleportToPlayerBtn).CornerRadius = UDim.new(0, 8)
+
+-- Player Tracker Variables
+local SelectedPlayer = nil
+
+-- Function Update Player List
+local function UpdatePlayerList()
+    -- Clear existing buttons
+    for _, child in ipairs(playerList:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    local players = Players:GetPlayers()
+    
+    for i, plr in ipairs(players) do
+        local Btn = Instance.new("TextButton")
+        Btn.Parent = playerList
+        Btn.Size = UDim2.new(1, -10, 0, 30)
+        Btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        Btn.Text = "👤 " .. plr.Name
+        Btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Btn.TextSize = 14
+        Btn.Font = Enum.Font.Gotham
+        Btn.AutoButtonColor = false
+        Btn.LayoutOrder = i
+        
+        local BtnCorner = Instance.new("UICorner")
+        BtnCorner.Parent = Btn
+
+        -- Hover effects
+        Btn.MouseEnter:Connect(function()
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 80)}):Play()
+        end)
+        
+        Btn.MouseLeave:Connect(function()
+            TweenService:Create(Btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 40, 50)}):Play()
+        end)
+
+        Btn.MouseButton1Click:Connect(function()
+            SelectedPlayer = plr.Name
+            coordLabel.Text = "Player dipilih: "..plr.Name.."\nMengambil koordinat..."
+            
+            -- Highlight selected button
+            for _, otherBtn in ipairs(playerList:GetChildren()) do
+                if otherBtn:IsA("TextButton") then
+                    if otherBtn == Btn then
+                        otherBtn.BackgroundColor3 = Color3.fromRGB(80, 120, 255)
+                        otherBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    else
+                        otherBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+                        otherBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                end
+            end
+        end)
+    end
+end
+
+-- Auto update canvas size when layout changes
+playerListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    playerList.CanvasSize = UDim2.new(0, 0, 0, playerListLayout.AbsoluteContentSize.Y)
+end)
+
+-- First Fill
+UpdatePlayerList()
+
+-- Refresh Button
+refreshBtn.MouseButton1Click:Connect(function()
+    UpdatePlayerList()
+end)
+
+-- Update Coordinates Realtime
+task.spawn(function()
+    while task.wait(0.3) do
+        if SelectedPlayer and currentTab == "Tracker" then
+            local target = Players:FindFirstChild(SelectedPlayer)
+            if target and target.Character then
+                local root = GetRoot(target.Character)
+                if root then
+                    coordLabel.Text =
+                        "Player: " .. SelectedPlayer ..
+                        "\nX: " .. math.floor(root.Position.X) ..
+                        "\nY: " .. math.floor(root.Position.Y) ..
+                        "\nZ: " .. math.floor(root.Position.Z)
+                else
+                    coordLabel.Text = "Player: " .. SelectedPlayer .. "\nRoot part tidak ditemukan"
+                end
+            else
+                coordLabel.Text = "Player: " .. SelectedPlayer .. "\nPlayer tidak ditemukan"
+            end
+        end
+    end
+end)
+
+-- Teleport Function
+teleportToPlayerBtn.MouseButton1Click:Connect(function()
+    if not SelectedPlayer then 
+        coordLabel.Text = "Pilih player terlebih dahulu!"
+        return 
+    end
+
+    local target = Players:FindFirstChild(SelectedPlayer)
+    if not target or not target.Character then 
+        coordLabel.Text = "Player tidak ditemukan!"
+        return 
+    end
+
+    local myRoot = GetRoot(player.Character)
+    local targetRoot = GetRoot(target.Character)
+
+    if myRoot and targetRoot then
+        player.Character:PivotTo(targetRoot.CFrame + Vector3.new(0,3,0))
+        coordLabel.Text = "Berhasil teleport ke " .. SelectedPlayer
+        StarterGui:SetCore("SendNotification", {
+            Title = "🚀 TELEPORTED", 
+            Text = "Teleported to " .. SelectedPlayer,
+            Duration = 3,
+            Icon = "rbxassetid://3926305904"
+        })
+    else
+        coordLabel.Text = "Gagal teleport - Root tidak ditemukan"
+    end
+end)
+
+-- Button hover effects
+local function setupButtonHover(button, normalColor, hoverColor)
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = normalColor}):Play()
+    end)
+end
+
+setupButtonHover(refreshBtn, Color3.fromRGB(60, 80, 180), Color3.fromRGB(70, 90, 200))
+setupButtonHover(teleportToPlayerBtn, Color3.fromRGB(80, 120, 255), Color3.fromRGB(100, 140, 255))
+setupButtonHover(mainTabBtn, Color3.fromRGB(80, 120, 255), Color3.fromRGB(100, 140, 255))
+setupButtonHover(trackerTabBtn, Color3.fromRGB(60, 60, 80), Color3.fromRGB(80, 80, 100))
+
+-- Auto update player list when players join/leave
+Players.PlayerAdded:Connect(function()
+    if currentTab == "Tracker" then
+        UpdatePlayerList()
+    end
+end)
+
+Players.PlayerRemoving:Connect(function()
+    if currentTab == "Tracker" then
+        UpdatePlayerList()
+    end
+end)
+
+-- === TELEPORT TO CURSOR FUNCTION ===
+local function teleportToCursor()
+    if not teleportEnabled then return end
+    if not player.Character then return end
+    
+    local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+    if not humanoidRootPart then return end
+    
+    -- Dapatkan posisi kursor di dunia 3D
+    local mouseHit = Mouse.Hit
+    if mouseHit then
+        -- Teleport player ke posisi kursor
+        humanoidRootPart.CFrame = CFrame.new(mouseHit.Position + Vector3.new(0, 3, 0))
+        
+        StarterGui:SetCore("SendNotification", {
+            Title = "🚀 TELEPORTED", 
+            Text = "Teleported to cursor position",
+            Duration = 2,
+            Icon = "rbxassetid://3926305904"
+        })
+    end
+end
+
+-- Mouse click handler untuk teleport (klik kiri)
+Mouse.Button1Down:Connect(function()
+    teleportToCursor()
+end)
+
+-- === SPEED CONTROL FUNCTIONS ===
+local function updateWalkSpeed()
+    local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        if forceWalkSpeed then
+            hum.WalkSpeed = forceWalkSpeed
+        elseif sprinting then
+            hum.WalkSpeed = sprintSpeed
+        else
+            hum.WalkSpeed = walkSpeed
+        end
+    end
+end
+
+local function increaseSpeed()
+    if forceWalkSpeed then
+        forceWalkSpeed = math.min(forceWalkSpeed + 5, 200)
+    else
+        walkSpeed = math.min(walkSpeed + 5, 200)
+        wsBox.Text = tostring(walkSpeed)
+    end
+    updateWalkSpeed()
+    
+    StarterGui:SetCore("SendNotification", {
+        Title = "⚡ SPEED INCREASED", 
+        Text = "Current speed: " .. (forceWalkSpeed or walkSpeed),
+        Duration = 2,
+        Icon = "rbxassetid://3926305904"
+    })
+end
+
+local function decreaseSpeed()
+    if forceWalkSpeed then
+        forceWalkSpeed = math.max(forceWalkSpeed - 5, 0)
+    else
+        walkSpeed = math.max(walkSpeed - 5, 0)
+        wsBox.Text = tostring(walkSpeed)
+    end
+    updateWalkSpeed()
+    
+    StarterGui:SetCore("SendNotification", {
+        Title = "⚡ SPEED DECREASED", 
+        Text = "Current speed: " .. (forceWalkSpeed or walkSpeed),
+        Duration = 2,
+        Icon = "rbxassetid://3926305904"
+    })
+end
+
+-- === GUI DESTROY FUNCTION ===
+local function destroyGUI()
+    -- Hapus semua connections dan reset state
+    if noclipConn then
+        noclipConn:Disconnect()
+        noclipConn = nil
+    end
+    
+    -- Stop fly jika aktif
+    StopFly()
+    
+    -- Reset semua variabel ke default
+    enabled = false
+    infJumpEnabled = false
+    sprinting = false
+    forceWalkSpeed = nil
+    keybindsEnabled = false
+    M_Pressed = false
+    teleportEnabled = false
+    flying = false
+    
+    -- Reset walk speed ke normal
+    local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.WalkSpeed = 16
+    end
+    
+    -- Reset lighting
+    Lighting.ClockTime = 14
+    Lighting.FogEnd = 1000
+    
+    -- Hapus GUI
+    gui:Destroy()
+    
+    StarterGui:SetCore("SendNotification", {
+        Title = "🔧 GUI DESTROYED", 
+        Text = "FerYsah Multiverse GUI has been removed",
+        Duration = 3,
+        Icon = "rbxassetid://3926305904"
+    })
+end
+
+-- === ENHANCED INPUT HANDLING ===
+UIS.InputBegan:Connect(function(input, gameProcessedEvent)
+    if gameProcessedEvent then return end
+    
+    -- M Key for keybinds activation
+    if input.KeyCode == Enum.KeyCode.M then
+        M_Pressed = true
+        if keybindsEnabled then
+            StarterGui:SetCore("SendNotification", {
+                Title = "⌨️ KEYBINDS ACTIVE", 
+                Text = "Keybinds mode activated",
+                Duration = 2,
+                Icon = "rbxassetid://3926305904"
+            })
+        end
+        return
+    end
+    
+    -- T Key untuk toggle teleport (tanpa perlu M)
+    if input.KeyCode == Enum.KeyCode.T then
+        teleportEnabled = not teleportEnabled
+        
+        -- Update GUI toggle
+        if teleportEnabled then
+            teleportToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(50, 120, 50)
+            teleportToggle.statusText.Text = "ON"
+            StarterGui:SetCore("SendNotification", {
+                Title = "🚀 TELEPORT ENABLED", 
+                Text = "Left-click to teleport to cursor",
+                Duration = 3,
+                Icon = "rbxassetid://3926305904"
+            })
+        else
+            teleportToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+            teleportToggle.statusText.Text = "OFF"
+            StarterGui:SetCore("SendNotification", {
+                Title = "🚀 TELEPORT DISABLED", 
+                Text = "Teleport feature turned off",
+                Duration = 3,
+                Icon = "rbxassetid://3926305904"
+            })
+        end
+        return
+    end
+    
+    -- L Key untuk hide/show GUI
+    if input.KeyCode == Enum.KeyCode.L then
+        mainContainer.Visible = not mainContainer.Visible
+        StarterGui:SetCore("SendNotification", {
+            Title = mainContainer.Visible and "👁️ GUI SHOWN" or "👁️ GUI HIDDEN", 
+            Text = mainContainer.Visible and "GUI is now visible" or "GUI is now hidden",
+            Duration = 2,
+            Icon = "rbxassetid://3926305904"
+        })
+        return
+    end
+    
+    -- C Key untuk destroy GUI (tanpa perlu M)
+    if input.KeyCode == Enum.KeyCode.C then
+        destroyGUI()
+        return
+    end
+    
+    -- Keybinds only work when M is pressed AND keybinds are enabled
+    if M_Pressed and keybindsEnabled then
+        -- N Key for Infinite Jump TOGGLE
+        if input.KeyCode == Enum.KeyCode.N then
+            infJumpEnabled = not infJumpEnabled
+            
+            -- Update GUI toggle
+            if infJumpEnabled then
+                infiniteJumpToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(50, 120, 50)
+                infiniteJumpToggle.statusText.Text = "ON"
+                if enabled then
+                    disableMultiJump()
+                end
+            else
+                infiniteJumpToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+                infiniteJumpToggle.statusText.Text = "OFF"
+            end
+            
+            updateJumpSystemStatus()
+            
+            StarterGui:SetCore("SendNotification", {
+                Title = "∞ INFINITE JUMP", 
+                Text = infJumpEnabled and "ENABLED" or "DISABLED",
+                Duration = 2,
+                Icon = "rbxassetid://3926305904"
+            })
+            return
+        end
+        
+        -- J Key for Multi-Jump TOGGLE
+        if input.KeyCode == Enum.KeyCode.J then
+            enabled = not enabled
+            
+            -- Update GUI toggle
+            if enabled then
+                multiJumpToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(50, 120, 50)
+                multiJumpToggle.statusText.Text = "ON"
+                if infJumpEnabled then
+                    disableInfiniteJump()
+                end
+            else
+                multiJumpToggle.statusIndicator.BackgroundColor3 = Color3.fromRGB(120, 50, 50)
+                multiJumpToggle.statusText.Text = "OFF"
+            end
+            
+            updateMultiJumpStatus()
+            
+            StarterGui:SetCore("SendNotification", {
+                Title = "🎯 MULTI-JUMP", 
+                Text = enabled and "ENABLED" or "DISABLED",
+                Duration = 2,
+                Icon = "rbxassetid://3926305904"
+            })
+            return
+        end
+        
+        -- B Key for NoClip TOGGLE
+        if input.KeyCode == Enum.KeyCode.B then
+            noclipToggle.button.MouseButton1Click()
+            return
+        end
+    end
+    
+    -- Plus/Minus untuk speed control (tanpa Alt)
+    if input.KeyCode == Enum.KeyCode.Equals or input.KeyCode == Enum.KeyCode.Plus then
+        increaseSpeed()
+        return
+    elseif input.KeyCode == Enum.KeyCode.Minus then
+        decreaseSpeed()
+        return
+    end
+    
+    -- Normal controls (without M requirement)
+    -- Jump Logic (Multi-Jump dan Infinite Jump)
+    local isJumpKey = false
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
+        isJumpKey = true
+    end
+    if input.UserInputType == Enum.UserInputType.Gamepad1 and input.KeyCode == Enum.KeyCode.ButtonA then
+        isJumpKey = true
+    end
+    
+    if isJumpKey and humanoid and char then
+        -- Infinite Jump Logic
+        if infJumpEnabled then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            return
+        end
+        
+        -- Multi-Jump Logic (DIPERBAIKI: 0 = unlimited)
+        if enabled then
+            local state = humanoid:GetState()
+            
+            if state == Enum.HumanoidStateType.Landed or state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics then
+                jumpsUsed = 1
+                if maxJumps == 0 then
+                    jumpStatusLabel.Text = "MULTI-JUMP\nUNLIMITED"
+                else
+                    jumpStatusLabel.Text = "MULTI-JUMP\nJumps: 1/" .. maxJumps
+                end
+                return
+            end
+
+            -- Jika maxJumps = 0, unlimited jumps
+            if maxJumps == 0 or jumpsUsed < maxJumps then
+                jumpsUsed = jumpsUsed + 1
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                
+                if maxJumps == 0 then
+                    jumpStatusLabel.Text = "MULTI-JUMP\nUNLIMITED"
+                    jumpStatusLabel.TextColor3 = Color3.fromRGB(255, 215, 100)
+                else
+                    jumpStatusLabel.Text = "MULTI-JUMP\nJumps: " .. jumpsUsed .. "/" .. maxJumps
+                    -- Visual feedback
+                    jumpStatusLabel.TextColor3 = jumpsUsed == maxJumps and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(100, 255, 100)
+                end
+            end
+        end
+    end
+    
+    -- Sprint Toggle (R key)
+    if input.KeyCode == Enum.KeyCode.R then
+        local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            sprinting = not sprinting
+            updateWalkSpeed()
+        end
+    end
+end)
+
+UIS.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.M then
+        M_Pressed = false
+    end
+end)
+
+-- Infinite Jump menggunakan JumpRequest (lebih smooth)
+UIS.JumpRequest:Connect(function()
+    if infJumpEnabled and player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+        player.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+
+-- === MULTI-JUMP LOGIC ===
+local function onCharacterAdded(characterInstance)
+    char = characterInstance
+    humanoid = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid")
+    jumpsUsed = 0
+
+    -- Reset when landed
+    humanoid.StateChanged:Connect(function(oldState, newState)
+        if newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Running then
+            jumpsUsed = 0
+            if enabled then
+                if maxJumps == 0 then
+                    jumpStatusLabel.Text = "MULTI-JUMP\nUNLIMITED"
+                else
+                    jumpStatusLabel.Text = "MULTI-JUMP\nJumps: 0/" .. maxJumps
+                end
+            end
+        end
+    end)
+    
+    -- Apply forced walkspeed if set
+    if forceWalkSpeed then
+        updateWalkSpeed()
+    end
+end
+
+-- Initial character setup
+if player.Character then
+    onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- WalkSpeed and Sprint handlers
+wsBox.FocusLost:Connect(function()
+    local val = tonumber(wsBox.Text)
+    if val and val >= 0 and val <= 200 then
+        walkSpeed = val
+        forceWalkSpeed = nil -- Reset force speed when manually setting
+        updateWalkSpeed()
+    else
+        wsBox.Text = tostring(walkSpeed)
+    end
+end)
+
+sprintBox.FocusLost:Connect(function()
+    local val = tonumber(sprintBox.Text)
+    if val and val >= 0 and val <= 200 then
+        sprintSpeed = val
+        updateWalkSpeed()
+    else
+        sprintBox.Text = tostring(sprintSpeed)
+    end
+end)
+
+-- Safety cleanup dengan perbaikan NoClip dan Fly
+player.CharacterRemoving:Connect(function()
+    jumpsUsed = 0
+    humanoid = nil
+    char = nil
+    if noclipConn then
+        noclipConn:Disconnect()
+        noclipConn = nil
+    end
+    -- Stop fly when character is removed
+    StopFly()
+    -- Reset force speed on character change
+    forceWalkSpeed = nil
+end)
+
+-- Initial status update
+updateMultiJumpStatus()
+
+-- Final notification
+StarterGui:SetCore("SendNotification", {
+    Title = "🌌 FER-YSAH MULTIVERSE PRO", 
+    Text = "Teleport & Fly Edition Loaded!\nT: Teleport | L: Hide/Show | C: Destroy",
+    Duration = 6,
+    Icon = "rbxassetid://3926305904"
+})
