@@ -694,21 +694,6 @@ local keybindsToggle = createEnhancedToggle("Enable Keybinds", "Press M to activ
         })
     end
 end)
-
--- Keybinds Info
-local keybindsInfo = Instance.new("TextLabel")
-keybindsInfo.Size = UDim2.fromOffset(370, 100)
-keybindsInfo.Position = UDim2.fromOffset(0, yPos)
-keybindsInfo.BackgroundTransparency = 1
-keybindsInfo.Text = "M + Keybinds:\nN: Infinite Jump (Toggle)\nJ: Multi-Jump (Toggle)\nB: NoClip Toggle\n\nStandalone:\nT: Teleport Toggle\nL: Hide/Show GUI\nC: Destroy GUI\n+: Increase Speed\n-: Decrease Speed\nR: Sprint"
-keybindsInfo.TextColor3 = Color3.fromRGB(200, 200, 255)
-keybindsInfo.Font = Enum.Font.Gotham
-keybindsInfo.TextSize = 11
-keybindsInfo.TextXAlignment = Enum.TextXAlignment.Left
-keybindsInfo.TextYAlignment = Enum.TextYAlignment.Top
-keybindsInfo.Parent = scrollingFrame
-yPos += 110
-
 -- === MULTI-JUMP ENHANCED SECTION ===
 local multiJumpSection = Instance.new("TextLabel")
 multiJumpSection.Size = UDim2.fromOffset(350, 25)
